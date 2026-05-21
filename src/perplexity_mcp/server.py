@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 import os
 
-from tavily import TavilyClient
+from tavily import AsyncTavilyClient
 
 from mcp.server.models import InitializationOptions
 import mcp.types as types
@@ -27,7 +27,7 @@ async def handle_list_prompts() -> list[types.Prompt]:
     return [
         types.Prompt(
             name="perplexity_search_web",
-            description="Search the web using Perplexity AI and filter results by recency",
+            description="Search the web with recency filtering",
             arguments=[
                 types.PromptArgument(
                     name="query",
@@ -82,7 +82,7 @@ async def list_tools() -> list[types.Tool]:
     return [
         types.Tool(
             name="perplexity_search_web",
-            description="Search the web using Perplexity AI with recency filtering",
+            description="Search the web with recency filtering",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -163,13 +163,16 @@ async def call_perplexity(query: str, recency: str) -> str:
 
 
 async def call_tavily(query: str, recency: str) -> str:
-    client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
-    response = client.search(
-        query=query,
-        max_results=5,
-        search_depth="advanced",
-        time_range=recency,
-    )
+    try:
+        client = AsyncTavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+        response = await client.search(
+            query=query,
+            max_results=5,
+            search_depth="advanced",
+            time_range=recency,
+        )
+    except Exception as e:
+        return f"Tavily search error: {e}"
     results = response.get("results", [])
     if not results:
         return "No results found."
