@@ -69,10 +69,12 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 The following environment variable is required in your claude_desktop_config.json. You can obtain an API key from [Perplexity](https://perplexity.ai)
 
-- `PERPLEXITY_API_KEY`: Your Perplexity AI API key
+- `PERPLEXITY_API_KEY`: Your Perplexity AI API key (required when using Perplexity provider)
 
 Optional environment variables:
 
+- `SEARCH_PROVIDER`: Select the search backend — `perplexity` (default) or `tavily`
+- `TAVILY_API_KEY`: Your Tavily API key (required when `SEARCH_PROVIDER=tavily`). Get one at [Tavily](https://app.tavily.com)
 - `PERPLEXITY_MODEL`: The Perplexity model to use (defaults to "sonar" if not specified)
 
   Available models:
@@ -94,7 +96,9 @@ Add this tool as a mcp server by editing the Cursor/Claude config file.
   "perplexity-mcp": {
     "env": {
       "PERPLEXITY_API_KEY": "XXXXXXXXXXXXXXXXXXXX",
-      "PERPLEXITY_MODEL": "sonar"
+      "PERPLEXITY_MODEL": "sonar",
+      "SEARCH_PROVIDER": "perplexity",
+      "TAVILY_API_KEY": "tvly-XXXXXXXXXXXXXXXXXXXX"
     },
     "command": "uvx",
     "args": [

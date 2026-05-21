@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 import os
 
+from tavily import TavilyClient
+
 from mcp.server.models import InitializationOptions
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
@@ -104,7 +106,11 @@ async def call_tool(
     if name == "perplexity_search_web":
         query = arguments["query"]
         recency = arguments.get("recency", "month")
-        result = await call_perplexity(query, recency)
+        provider = os.getenv("SEARCH_PROVIDER", "perplexity")
+        if provider == "tavily":
+            result = await call_tavily(query, recency)
+        else:
+            result = await call_perplexity(query, recency)
         return [types.TextContent(type="text", text=str(result))]
     raise ValueError(f"Tool not found: {name}")
 
@@ -156,10 +162,34 @@ async def call_perplexity(query: str, recency: str) -> str:
             return content
 
 
+async def call_tavily(query: str, recency: str) -> str:
+    client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+    response = client.search(
+        query=query,
+        max_results=5,
+        search_depth="advanced",
+        time_range=recency,
+    )
+    results = response.get("results", [])
+    if not results:
+        return "No results found."
+    formatted = []
+    for i, r in enumerate(results, 1):
+        title = r.get("title", "No title")
+        url = r.get("url", "")
+        content = r.get("content", "")
+        formatted.append(f"[{i}] {title}\n    {url}\n    {content}")
+    return "\n\n".join(formatted)
+
+
 async def main_async():
-    API_KEY = os.getenv("PERPLEXITY_API_KEY")
-    if not API_KEY:
-        raise ValueError("PERPLEXITY_API_KEY environment variable is required")
+    provider = os.getenv("SEARCH_PROVIDER", "perplexity")
+    if provider == "tavily":
+        if not os.getenv("TAVILY_API_KEY"):
+            raise ValueError("TAVILY_API_KEY environment variable is required when SEARCH_PROVIDER=tavily")
+    else:
+        if not os.getenv("PERPLEXITY_API_KEY"):
+            raise ValueError("PERPLEXITY_API_KEY environment variable is required")
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         await server.run(
@@ -180,32 +210,44 @@ def main():
     """CLI entry point for perplexity-mcp"""
     logging.basicConfig(level=logging.INFO)
 
-    API_KEY = os.getenv("PERPLEXITY_API_KEY")
-    if not API_KEY:
-        print(
-            "Error: PERPLEXITY_API_KEY environment variable is required",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    provider = os.getenv("SEARCH_PROVIDER", "perplexity")
+    logging.info(f"Search provider: {provider}")
 
-    # Log which model is being used (helpful for debug)
-    model = os.getenv("PERPLEXITY_MODEL", "sonar")
-    logging.info(f"Using Perplexity AI model: {model}")
-    
-    # List available models
-    available_models = {
-        "sonar-deep-research": "128k context - Enhanced research capabilities",
-        "sonar-reasoning-pro": "128k context - Advanced reasoning with professional focus",
-        "sonar-reasoning": "128k context - Enhanced reasoning capabilities",
-        "sonar-pro": "200k context - Professional grade model",
-        "sonar": "128k context - Default model",
-        "r1-1776": "128k context - Alternative architecture"
-    }
-    
-    logging.info("Available Perplexity models (set with PERPLEXITY_MODEL environment variable):")
-    for model_name, description in available_models.items():
-        marker = "→" if model_name == model else " "
-        logging.info(f" {marker} {model_name}: {description}")
+    if provider == "tavily":
+        if not os.getenv("TAVILY_API_KEY"):
+            print(
+                "Error: TAVILY_API_KEY environment variable is required when SEARCH_PROVIDER=tavily",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        logging.info("Using Tavily search API")
+    else:
+        API_KEY = os.getenv("PERPLEXITY_API_KEY")
+        if not API_KEY:
+            print(
+                "Error: PERPLEXITY_API_KEY environment variable is required",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        # Log which model is being used (helpful for debug)
+        model = os.getenv("PERPLEXITY_MODEL", "sonar")
+        logging.info(f"Using Perplexity AI model: {model}")
+
+        # List available models
+        available_models = {
+            "sonar-deep-research": "128k context - Enhanced research capabilities",
+            "sonar-reasoning-pro": "128k context - Advanced reasoning with professional focus",
+            "sonar-reasoning": "128k context - Enhanced reasoning capabilities",
+            "sonar-pro": "200k context - Professional grade model",
+            "sonar": "128k context - Default model",
+            "r1-1776": "128k context - Alternative architecture"
+        }
+
+        logging.info("Available Perplexity models (set with PERPLEXITY_MODEL environment variable):")
+        for model_name, description in available_models.items():
+            marker = "→" if model_name == model else " "
+            logging.info(f" {marker} {model_name}: {description}")
 
     asyncio.run(main_async())
 
